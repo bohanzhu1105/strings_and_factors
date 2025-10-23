@@ -14,6 +14,27 @@ library(tidyverse)
 library(rvest)
 ```
 
+```{r, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%",
+  fig.retina = 2,
+  dpi = 320
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+
 ## Mostly use string vectors
 
 ```{r}
@@ -107,5 +128,134 @@ as.numeric(vec_sex)
 ```{r}
 vec_sex = fct_inorder(vec_sex)
 vec_sex #we make male as the reference
+```
+
+
+
+## Revisit NSDUH
+```{r}
+url = "http://samhda.s3-us-gov-west-1.amazonaws.com/s3fs-public/field-uploads/2k15StateFiles/NSDUHsaeShortTermCHG2015.htm"
+```
+
+```{r}
+drug_use_html = read_html(url)
+
+ndsuh_df = 
+  drug_use_html |> 
+  html_table() |> 
+  first() |> 
+  slice(-1)
+```
+
+Now do the tidying
+```{r}
+marj_df = 
+  ndsuh_df |>
+  select(-contains("P Value")) |>
+  pivot_longer(
+    -State,
+    names_to = "age_year", 
+    values_to = "percent") |> 
+  separate(age_year, into = c("age", "year"), sep = "\\(") |>
+  mutate(
+    year = str_replace(year, "\\)", ""),
+    percent = str_replace(percent, "[a-c]$", ""),
+    percent = as.numeric(percent)) |>
+  filter(!(State %in% c("Total U.S.", "Northeast", "Midwest", "South", "West")))
+```
+
+Let's make quick plot
+```{r}
+marj_df |>
+  filter(age == "12-17") |> 
+  mutate(State = fct_reorder(State, percent)) |> 
+  ggplot(aes(x = State, y = percent, color = year)) + 
+    geom_point() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Restaurant Inspections!
+
+```{r}
+library(p8105.datasets)
+data("rest_inspec")
+```
+
+```{r}
+rest_inspec = 
+    rest_inspec |> 
+    rename(borough = boro)
+
+rest_inspec |> 
+  group_by(borough, grade) |> 
+  summarize(n = n()) |> 
+  pivot_wider(
+    names_from = grade,
+    values_from = n)
+```
+
+Update the dataset
+
+```{r}
+rest_inspec =
+  rest_inspec |> 
+  filter(
+    grade %in% c("A", "B", "C"),
+    borough !=0)
+```
+
+Look for pizza places 
+
+```{r}
+rest_inspec |> 
+  filter(str_detect(dba, "Pizza")) |> 
+  group_by(borough, grade) |> 
+  summarize(n = n()) |> 
+  pivot_wider(
+    names_from = grade,
+    values_from = n)
+```
+
+```{r}
+rest_inspec |> 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) |> 
+  group_by(borough, grade) |> 
+  summarize(n = n()) |> 
+  pivot_wider(
+    names_from = grade,
+    values_from = n)
+```
+
+Let's make this table a plot instead
+
+```{r}
+rest_inspec |> 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) |> 
+  mutate(borough = fct_infreq(borough)) |> 
+  ggplot(aes(x = borough, fill = grade)) +
+  geom_bar()
+```
+
+This doesn't work as I wanted
+```{r}
+rest_inspec |> 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) |> 
+  mutate(
+    borough = fct_infreq(borough),
+    borough = str_replace(borough, "Manhattan", "The City")) |>   
+  ggplot(aes(x = borough, fill = grade)) +
+  geom_bar()
+```
+
+but this does. 
+```{r}
+rest_inspec |> 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) |> 
+  mutate(
+    borough = fct_infreq(borough),
+    borough = fct_recode(borough, "The city" = "Manhattan")
+    )|>   
+  ggplot(aes(x = borough, fill = grade)) +
+  geom_bar()
 ```
 
